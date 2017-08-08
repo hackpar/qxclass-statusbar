@@ -60,6 +60,7 @@ public class StatusBar extends CordovaPlugin {
 
                 // Read 'StatusBarBackgroundColor' from config.xml, default is #000000.
                 setStatusBarBackgroundColor(preferences.getString("StatusBarBackgroundColor", "#000000"));
+                window.setStatusBarColor(Color.TRANSPARENT);
             }
         });
     }
