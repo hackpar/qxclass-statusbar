@@ -6,9 +6,9 @@
  to you under the Apache License, Version 2.0 (the
  "License"); you may not use this file except in compliance
  with the License.  You may obtain a copy of the License at
- 
+
  http://www.apache.org/licenses/LICENSE-2.0
- 
+
  Unless required by applicable law or agreed to in writing,
  software distributed under the License is distributed on an
  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -17,34 +17,31 @@
  under the License.
  */
 
+#import <Foundation/Foundation.h>
 #import <Cordova/CDVPlugin.h>
-#import <Cordova/CDVInvokedUrlCommand.h>
+#import <Lottie/Lottie.h>
 
-@interface CDVStatusBar : CDVPlugin {
-    @protected
-    BOOL _statusBarOverlaysWebView;
-    UIView* _statusBarBackgroundView;
-    BOOL _uiviewControllerBasedStatusBarAppearance;
-    UIColor* _statusBarBackgroundColor;
-    NSString* _eventsCallbackId;
+typedef struct {
+    BOOL iPhone;
+    BOOL iPad;
+    BOOL iPhone4;
+    BOOL iPhone5;
+    BOOL iPhone6;
+    BOOL iPhone6Plus;
+    BOOL retina;
+
+} CDV_iOSDevice;
+
+@interface CDVSplashScreen : CDVPlugin {
+    UIActivityIndicatorView* _activityView;
+    UIImageView* _imageView;
+    LOTAnimationView *LotAnimation;
+    NSString* _curImageName;
+    BOOL _visible;
+    BOOL _destroyed;
 }
 
-@property (atomic, assign) BOOL statusBarOverlaysWebView;
-@property (atomic, assign) BOOL statusBarVisible;
-
-- (void) overlaysWebView:(CDVInvokedUrlCommand*)command;
-
-- (void) styleDefault:(CDVInvokedUrlCommand*)command;
-- (void) styleLightContent:(CDVInvokedUrlCommand*)command;
-- (void) styleBlackTranslucent:(CDVInvokedUrlCommand*)command;
-- (void) styleBlackOpaque:(CDVInvokedUrlCommand*)command;
-
-- (void) backgroundColorByName:(CDVInvokedUrlCommand*)command;
-- (void) backgroundColorByHexString:(CDVInvokedUrlCommand*)command;
-
-- (void) hide:(CDVInvokedUrlCommand*)command;
-- (void) show:(CDVInvokedUrlCommand*)command;
-    
-- (void) _ready:(CDVInvokedUrlCommand*)command;
+- (void)show:(CDVInvokedUrlCommand*)command;
+- (void)hide:(CDVInvokedUrlCommand*)command;
 
 @end
