@@ -17,515 +17,485 @@
  under the License.
  */
 
-#import "CDVSplashScreen.h"
+/*
+ NOTE: plugman/cordova cli should have already installed this,
+ but you need the value UIViewControllerBasedStatusBarAppearance
+ in your Info.plist as well to set the styles in iOS 7
+ */
+
+#import "CDVStatusBar.h"
+#import <objc/runtime.h>
 #import <Cordova/CDVViewController.h>
-#import <Cordova/CDVScreenOrientationDelegate.h>
-#import "CDVViewController+SplashScreen.h"
-#import <Lottie/Lottie.h>
 
-#define kSplashScreenDurationDefault 3000.0f
-#define kFadeDurationDefault 500.0f
+static const void *kHideStatusBar = &kHideStatusBar;
+static const void *kStatusBarStyle = &kStatusBarStyle;
 
+@interface CDVViewController (StatusBar)
 
-@implementation CDVSplashScreen
+@property (nonatomic, retain) id sb_hideStatusBar;
+@property (nonatomic, retain) id sb_statusBarStyle;
 
-- (void)pluginInitialize
-{
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(pageDidLoad) name:CDVPageDidLoadNotification object:nil];
+@end
 
-    [self setVisible:YES];
+@implementation CDVViewController (StatusBar)
+
+@dynamic sb_hideStatusBar;
+@dynamic sb_statusBarStyle;
+
+- (id)sb_hideStatusBar {
+    return objc_getAssociatedObject(self, kHideStatusBar);
 }
 
-- (void)show:(CDVInvokedUrlCommand*)command
-{
-    [self setVisible:YES];
+- (void)setSb_hideStatusBar:(id)newHideStatusBar {
+    objc_setAssociatedObject(self, kHideStatusBar, newHideStatusBar, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
-- (void)hide:(CDVInvokedUrlCommand*)command
-{
-    [self setVisible:NO andForce:YES];
+- (id)sb_statusBarStyle {
+    return objc_getAssociatedObject(self, kStatusBarStyle);
 }
 
-- (void)pageDidLoad
-{
-    id autoHideSplashScreenValue = [self.commandDelegate.settings objectForKey:[@"AutoHideSplashScreen" lowercaseString]];
+- (void)setSb_statusBarStyle:(id)newStatusBarStyle {
+    objc_setAssociatedObject(self, kStatusBarStyle, newStatusBarStyle, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
 
-    // if value is missing, default to yes
-    if ((autoHideSplashScreenValue == nil) || [autoHideSplashScreenValue boolValue]) {
-        [self setVisible:NO];
-    }
+- (BOOL) prefersStatusBarHidden {
+    return [self.sb_hideStatusBar boolValue];
+}
+
+- (UIStatusBarStyle)preferredStatusBarStyle
+{
+    return (UIStatusBarStyle)[self.sb_statusBarStyle intValue];
+}
+
+@end
+
+
+@interface CDVStatusBar () <UIScrollViewDelegate>
+- (void)fireTappedEvent;
+- (void)updateIsVisible:(BOOL)visible;
+@end
+
+@implementation CDVStatusBar
+
+- (id)settingForKey:(NSString*)key
+{
+    return [self.commandDelegate.settings objectForKey:[key lowercaseString]];
 }
 
 - (void)observeValueForKeyPath:(NSString*)keyPath ofObject:(id)object change:(NSDictionary*)change context:(void*)context
 {
-    [self updateImage];
+    if ([keyPath isEqual:@"statusBarHidden"]) {
+        NSNumber* newValue = [change objectForKey:NSKeyValueChangeNewKey];
+        [self updateIsVisible:![newValue boolValue]];
+    }
 }
 
-- (void)createViews
+-(void)cordovaViewWillAppear:(NSNotification*)notification
 {
-    /*
-     * The Activity View is the top spinning throbber in the status/battery bar. We init it with the default Grey Style.
-     *
-     *     whiteLarge = UIActivityIndicatorViewStyleWhiteLarge
-     *     white      = UIActivityIndicatorViewStyleWhite
-     *     gray       = UIActivityIndicatorViewStyleGray
-     *
-     */
-
-    // Determine whether rotation should be enabled for this device
-    // Per iOS HIG, landscape is only supported on iPad and iPhone 6+
-    CDV_iOSDevice device = [self getCurrentDevice];
-    BOOL autorotateValue = (device.iPad || device.iPhone6Plus) ?
-        [(CDVViewController *)self.viewController shouldAutorotateDefaultValue] :
-        NO;
-
-    [(CDVViewController *)self.viewController setEnabledAutorotation:autorotateValue];
-
-    NSString* topActivityIndicator = [self.commandDelegate.settings objectForKey:[@"TopActivityIndicator" lowercaseString]];
-    UIActivityIndicatorViewStyle topActivityIndicatorStyle = UIActivityIndicatorViewStyleGray;
-
-    if ([topActivityIndicator isEqualToString:@"whiteLarge"])
-    {
-        topActivityIndicatorStyle = UIActivityIndicatorViewStyleWhiteLarge;
-    }
-    else if ([topActivityIndicator isEqualToString:@"white"])
-    {
-        topActivityIndicatorStyle = UIActivityIndicatorViewStyleWhite;
-    }
-    else if ([topActivityIndicator isEqualToString:@"gray"])
-    {
-        topActivityIndicatorStyle = UIActivityIndicatorViewStyleGray;
-    }
-
-    UIView* parentView = self.viewController.view;
-    parentView.userInteractionEnabled = NO;  // disable user interaction while splashscreen is shown
-    _activityView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:topActivityIndicatorStyle];
-    _activityView.center = CGPointMake(parentView.bounds.size.width / 2, parentView.bounds.size.height / 2);
-    _activityView.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin
-        | UIViewAutoresizingFlexibleBottomMargin | UIViewAutoresizingFlexibleRightMargin;
-    [_activityView startAnimating];
-
-///Users/qinxue/Documents/testQXStudent/www/bootstarp/data.json
-    // Set the frame & image later.
-    _imageView = [[UIImageView alloc] init];
-
-//    LOTAnimationView *LotAnimation = [[LOTAnimationView alloc]initWithContentsOfURL:[NSURL URLWithString:@"~/www/bootstarp/data.json"]];
-    NSString *imagePath = [[NSBundle mainBundle] pathForResource:@"data" ofType:@"json"];
-    NSLog(@"imagePath = %@",imagePath);
-//    LOTAnimationView *LotAnimation = [LOTAnimationView animationWithFilePath:@"~/www/bootstarp/data.json"];
-
-    LOTAnimationView *LotAnimation = [LOTAnimationView animationNamed:@"data" inBundle:[NSBundle mainBundle]];
-    CGRect rect = [[UIScreen mainScreen] bounds];
-    CGSize size = rect.size;
-    CGFloat width = size.width;
-    CGFloat height = size.height;
-    LotAnimation.frame = CGRectMake(0, 0, width, height);
-
-    [parentView addSubview:LotAnimation];
-    LotAnimation.loopAnimation = NO;  //????
-
-    [LotAnimation playWithCompletion:^(BOOL animationFinished) {
-        LotAnimation.alpha = 0;
-        // Do Something
-        NSLog(@"bool = %@",animationFinished);
-    }];
-    _destroyed = NO;
-//    [parentView addSubview:_imageView];
-////
-//    id showSplashScreenSpinnerValue = [self.commandDelegate.settings objectForKey:[@"ShowSplashScreenSpinner" lowercaseString]];
-//    // backwards compatibility - if key is missing, default to true
-//    if ((showSplashScreenSpinnerValue == nil) || [showSplashScreenSpinnerValue boolValue])
-//    {
-//        [parentView addSubview:_activityView];
-//    }
-////
-////    // Frame is required when launching in portrait mode.
-////    // Bounds for landscape since it captures the rotation.
-    [parentView addObserver:self forKeyPath:@"frame" options:0 context:nil];
-    [parentView addObserver:self forKeyPath:@"bounds" options:0 context:nil];
-////
-    [self updateImage];
-//    _destroyed = NO;
+    [self resizeWebView];
 }
 
-- (void)hideViews
+-(void)statusBarDidChangeFrame:(NSNotification*)notification
 {
-    [_imageView setAlpha:0];
-    [LotAnimation setAlpha:0];
-    [_activityView setAlpha:0];
+    //add a small delay for iOS 7 ( 0.1 seconds )
+    __weak CDVStatusBar* weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        [weakSelf resizeWebView];
+    });
 }
 
-- (void)destroyViews
+- (void)pluginInitialize
 {
-    _destroyed = YES;
-    [(CDVViewController *)self.viewController setEnabledAutorotation:[(CDVViewController *)self.viewController shouldAutorotateDefaultValue]];
+    BOOL isiOS7 = (IsAtLeastiOSVersion(@"7.0"));
 
-    [_imageView removeFromSuperview];
-    [_activityView removeFromSuperview];
-    _imageView = nil;
-    _activityView = nil;
-    _curImageName = nil;
+    // init
+    NSNumber* uiviewControllerBasedStatusBarAppearance = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"UIViewControllerBasedStatusBarAppearance"];
+    _uiviewControllerBasedStatusBarAppearance = (uiviewControllerBasedStatusBarAppearance == nil || [uiviewControllerBasedStatusBarAppearance boolValue]) && isiOS7;
 
-    self.viewController.view.userInteractionEnabled = YES;  // re-enable user interaction upon completion
-    @try {
-        [self.viewController.view removeObserver:self forKeyPath:@"frame"];
-        [self.viewController.view removeObserver:self forKeyPath:@"bounds"];
+    // observe the statusBarHidden property
+    [[UIApplication sharedApplication] addObserver:self forKeyPath:@"statusBarHidden" options:NSKeyValueObservingOptionNew context:NULL];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(statusBarDidChangeFrame:) name: UIApplicationDidChangeStatusBarFrameNotification object:nil];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(cordovaViewWillAppear:) name: @"CDVViewWillAppearNotification" object:nil];
+
+    _statusBarOverlaysWebView = YES; // default
+
+    [self initializeStatusBarBackgroundView];
+
+    self.viewController.view.autoresizesSubviews = YES;
+
+    NSString* setting;
+
+    setting  = @"StatusBarBackgroundColor";
+    if ([self settingForKey:setting]) {
+        [self _backgroundColorByHexString:[self settingForKey:setting]];
     }
-    @catch (NSException *exception) {
-        // When reloading the page from a remotely connected Safari, there
-        // are no observers, so the removeObserver method throws an exception,
-        // that we can safely ignore.
-        // Alternatively we can check whether there are observers before calling removeObserver
+
+    setting  = @"StatusBarStyle";
+    if ([self settingForKey:setting]) {
+        [self setStatusBarStyle:[self settingForKey:setting]];
     }
+
+    // blank scroll view to intercept status bar taps
+    self.webView.scrollView.scrollsToTop = NO;
+    UIScrollView *fakeScrollView = [[UIScrollView alloc] initWithFrame:UIScreen.mainScreen.bounds];
+    fakeScrollView.delegate = self;
+    fakeScrollView.scrollsToTop = YES;
+    [self.viewController.view addSubview:fakeScrollView]; // Add scrollview to the view heirarchy so that it will begin accepting status bar taps
+    [self.viewController.view sendSubviewToBack:fakeScrollView]; // Send it to the very back of the view heirarchy
+    fakeScrollView.contentSize = CGSizeMake(UIScreen.mainScreen.bounds.size.width, UIScreen.mainScreen.bounds.size.height * 2.0f); // Make the scroll view longer than the screen itself
+    fakeScrollView.contentOffset = CGPointMake(0.0f, UIScreen.mainScreen.bounds.size.height); // Scroll down so a tap will take scroll view back to the top
+
+    _statusBarVisible = ![UIApplication sharedApplication].isStatusBarHidden;
 }
 
-- (CDV_iOSDevice) getCurrentDevice
+- (void)onReset {
+    _eventsCallbackId = nil;
+}
+
+- (void)fireTappedEvent {
+    if (_eventsCallbackId == nil) {
+        return;
+    }
+    NSDictionary* payload = @{@"type": @"tap"};
+    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:payload];
+    [result setKeepCallbackAsBool:YES];
+    [self.commandDelegate sendPluginResult:result callbackId:_eventsCallbackId];
+}
+
+- (void)updateIsVisible:(BOOL)visible {
+    if (_eventsCallbackId == nil) {
+        return;
+    }
+    CDVPluginResult* result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsBool:visible];
+    [result setKeepCallbackAsBool:YES];
+    [self.commandDelegate sendPluginResult:result callbackId:_eventsCallbackId];
+}
+
+- (void) _ready:(CDVInvokedUrlCommand*)command
 {
-    CDV_iOSDevice device;
-
-    UIScreen* mainScreen = [UIScreen mainScreen];
-    CGFloat mainScreenHeight = mainScreen.bounds.size.height;
-    CGFloat mainScreenWidth = mainScreen.bounds.size.width;
-
-    int limit = MAX(mainScreenHeight,mainScreenWidth);
-
-    device.iPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
-    device.iPhone = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPhone);
-    device.retina = ([mainScreen scale] == 2.0);
-    device.iPhone4 = (device.iPhone && limit == 480.0);
-    device.iPhone5 = (device.iPhone && limit == 568.0);
-    // note these below is not a true device detect, for example if you are on an
-    // iPhone 6/6+ but the app is scaled it will prob set iPhone5 as true, but
-    // this is appropriate for detecting the runtime screen environment
-    device.iPhone6 = (device.iPhone && limit == 667.0);
-    device.iPhone6Plus = (device.iPhone && limit == 736.0);
-
-    return device;
-}
-
-- (BOOL) isUsingCDVLaunchScreen {
-    NSString* launchStoryboardName = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"UILaunchStoryboardName"];
-    if (launchStoryboardName) {
-        return ([launchStoryboardName isEqualToString:@"CDVLaunchScreen"]);
-    } else {
-        return NO;
+    _eventsCallbackId = command.callbackId;
+    [self updateIsVisible:![UIApplication sharedApplication].statusBarHidden];
+    NSString* setting = @"StatusBarOverlaysWebView";
+    if ([self settingForKey:setting]) {
+        self.statusBarOverlaysWebView = [(NSNumber*)[self settingForKey:setting] boolValue];
+        if (self.statusBarOverlaysWebView) {
+            [self resizeWebView];
+        }
     }
 }
 
-- (NSString*)getImageName:(UIInterfaceOrientation)currentOrientation delegate:(id<CDVScreenOrientationDelegate>)orientationDelegate device:(CDV_iOSDevice)device
+- (void) initializeStatusBarBackgroundView
 {
-    // Use UILaunchImageFile if specified in plist.  Otherwise, use Default.
-    NSString* imageName = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"UILaunchImageFile"];
+    CGRect statusBarFrame = [UIApplication sharedApplication].statusBarFrame;
 
-    // detect if we are using CB-9762 Launch Storyboard; if so, return the associated image instead
-    if ([self isUsingCDVLaunchScreen]) {
-        imageName = @"LaunchStoryboard";
-        return imageName;
+    if ([[UIApplication sharedApplication]statusBarOrientation] == UIInterfaceOrientationPortraitUpsideDown &&
+        statusBarFrame.size.height + statusBarFrame.origin.y == [self.viewController.view.window bounds].size.height) {
+
+        // When started in upside-down orientation on iOS 7, status bar will be bound to lower edge of the
+        // screen (statusBarFrame.origin.y will be somewhere around screen height). In this case we need to
+        // correct frame's coordinates
+        statusBarFrame.origin.y = 0;
     }
 
-    NSUInteger supportedOrientations = [orientationDelegate supportedInterfaceOrientations];
+    statusBarFrame = [self invertFrameIfNeeded:statusBarFrame];
 
-    // Checks to see if the developer has locked the orientation to use only one of Portrait or Landscape
-    BOOL supportsLandscape = (supportedOrientations & UIInterfaceOrientationMaskLandscape);
-    BOOL supportsPortrait = (supportedOrientations & UIInterfaceOrientationMaskPortrait || supportedOrientations & UIInterfaceOrientationMaskPortraitUpsideDown);
-    // this means there are no mixed orientations in there
-    BOOL isOrientationLocked = !(supportsPortrait && supportsLandscape);
-
-    if (imageName)
-    {
-        imageName = [imageName stringByDeletingPathExtension];
-    }
-    else
-    {
-        imageName = @"Default";
-    }
-
-    // Add Asset Catalog specific prefixes
-    if ([imageName isEqualToString:@"LaunchImage"])
-    {
-        if (device.iPhone4 || device.iPhone5 || device.iPad) {
-            imageName = [imageName stringByAppendingString:@"-700"];
-        } else if(device.iPhone6) {
-            imageName = [imageName stringByAppendingString:@"-800"];
-        } else if(device.iPhone6Plus) {
-            imageName = [imageName stringByAppendingString:@"-800"];
-            if (currentOrientation == UIInterfaceOrientationPortrait || currentOrientation == UIInterfaceOrientationPortraitUpsideDown)
-            {
-                imageName = [imageName stringByAppendingString:@"-Portrait"];
-            }
-        }
-    }
-
-    if (device.iPhone5)
-    { // does not support landscape
-        imageName = [imageName stringByAppendingString:@"-568h"];
-    }
-    else if (device.iPhone6)
-    { // does not support landscape
-        imageName = [imageName stringByAppendingString:@"-667h"];
-    }
-    else if (device.iPhone6Plus)
-    { // supports landscape
-        if (isOrientationLocked)
-        {
-            imageName = [imageName stringByAppendingString:(supportsLandscape ? @"-Landscape" : @"")];
-        }
-        else
-        {
-            switch (currentOrientation)
-            {
-                case UIInterfaceOrientationLandscapeLeft:
-                case UIInterfaceOrientationLandscapeRight:
-                        imageName = [imageName stringByAppendingString:@"-Landscape"];
-                    break;
-                default:
-                    break;
-            }
-        }
-        imageName = [imageName stringByAppendingString:@"-736h"];
-
-    }
-    else if (device.iPad)
-    {   // supports landscape
-        if (isOrientationLocked)
-        {
-            imageName = [imageName stringByAppendingString:(supportsLandscape ? @"-Landscape" : @"-Portrait")];
-        }
-        else
-        {
-            switch (currentOrientation)
-            {
-                case UIInterfaceOrientationLandscapeLeft:
-                case UIInterfaceOrientationLandscapeRight:
-                    imageName = [imageName stringByAppendingString:@"-Landscape"];
-                    break;
-
-                case UIInterfaceOrientationPortrait:
-                case UIInterfaceOrientationPortraitUpsideDown:
-                default:
-                    imageName = [imageName stringByAppendingString:@"-Portrait"];
-                    break;
-            }
-        }
-    }
-
-    return imageName;
+    _statusBarBackgroundView = [[UIView alloc] initWithFrame:statusBarFrame];
+    _statusBarBackgroundView.backgroundColor = _statusBarBackgroundColor;
+    _statusBarBackgroundView.autoresizingMask = (UIViewAutoresizingFlexibleWidth  | UIViewAutoresizingFlexibleBottomMargin);
+    _statusBarBackgroundView.autoresizesSubviews = YES;
 }
 
-- (UIInterfaceOrientation)getCurrentOrientation
-{
-    UIInterfaceOrientation iOrientation = [UIApplication sharedApplication].statusBarOrientation;
-    UIDeviceOrientation dOrientation = [UIDevice currentDevice].orientation;
-
-    bool landscape;
-
-    if (dOrientation == UIDeviceOrientationUnknown || dOrientation == UIDeviceOrientationFaceUp || dOrientation == UIDeviceOrientationFaceDown) {
-        // If the device is laying down, use the UIInterfaceOrientation based on the status bar.
-        landscape = UIInterfaceOrientationIsLandscape(iOrientation);
-    } else {
-        // If the device is not laying down, use UIDeviceOrientation.
-        landscape = UIDeviceOrientationIsLandscape(dOrientation);
-
-        // There's a bug in iOS!!!! http://openradar.appspot.com/7216046
-        // So values needs to be reversed for landscape!
-        if (dOrientation == UIDeviceOrientationLandscapeLeft)
-        {
-            iOrientation = UIInterfaceOrientationLandscapeRight;
-        }
-        else if (dOrientation == UIDeviceOrientationLandscapeRight)
-        {
-            iOrientation = UIInterfaceOrientationLandscapeLeft;
-        }
-        else if (dOrientation == UIDeviceOrientationPortrait)
-        {
-            iOrientation = UIInterfaceOrientationPortrait;
-        }
-        else if (dOrientation == UIDeviceOrientationPortraitUpsideDown)
-        {
-            iOrientation = UIInterfaceOrientationPortraitUpsideDown;
-        }
+- (CGRect) invertFrameIfNeeded:(CGRect)rect {
+    // landscape is where (width > height). On iOS < 8, we need to invert since frames are
+    // always in Portrait context. Do not run this on ios 8 or above to avoid breaking ipad pro multitask layout
+    if (!IsAtLeastiOSVersion(@"8.0") && UIInterfaceOrientationIsLandscape([[UIApplication sharedApplication] statusBarOrientation])) {
+        CGFloat temp = rect.size.width;
+        rect.size.width = rect.size.height;
+        rect.size.height = temp;
+        rect.origin = CGPointZero;
     }
 
-    return iOrientation;
+    return rect;
 }
 
-// Sets the view's frame and image.
-- (void)updateImage
+- (void) setStatusBarOverlaysWebView:(BOOL)statusBarOverlaysWebView
 {
-    NSString* imageName = [self getImageName:[self getCurrentOrientation] delegate:(id<CDVScreenOrientationDelegate>)self.viewController device:[self getCurrentDevice]];
-
-    if (![imageName isEqualToString:_curImageName])
-    {
-        UIImage* img = [UIImage imageNamed:imageName];
-        _imageView.image = img;
-        _curImageName = imageName;
-    }
-
-    // Check that splash screen's image exists before updating bounds
-    if (_imageView.image)
-    {
-        [self updateBounds];
-    }
-    else
-    {
-        NSLog(@"WARNING: The splashscreen image named %@ was not found", imageName);
-    }
-}
-
-- (void)updateBounds
-{
-    if ([self isUsingCDVLaunchScreen]) {
-        // CB-9762's launch screen expects the image to fill the screen and be scaled using AspectFill.
-        CGSize viewportSize = [UIApplication sharedApplication].delegate.window.bounds.size;
-        _imageView.frame = CGRectMake(0, 0, viewportSize.width, viewportSize.height);
-        _imageView.contentMode = UIViewContentModeScaleAspectFill;
+    // we only care about the latest iOS version or a change in setting
+    if (!IsAtLeastiOSVersion(@"7.0") || statusBarOverlaysWebView == _statusBarOverlaysWebView) {
         return;
     }
 
-    UIImage* img = _imageView.image;
-    CGRect imgBounds = (img) ? CGRectMake(0, 0, img.size.width, img.size.height) : CGRectZero;
+    _statusBarOverlaysWebView = statusBarOverlaysWebView;
 
-    CGSize screenSize = [self.viewController.view convertRect:[UIScreen mainScreen].bounds fromView:nil].size;
-    UIInterfaceOrientation orientation = [UIApplication sharedApplication].statusBarOrientation;
-    CGAffineTransform imgTransform = CGAffineTransformIdentity;
+    [self resizeWebView];
 
-    /* If and only if an iPhone application is landscape-only as per
-     * UISupportedInterfaceOrientations, the view controller's orientation is
-     * landscape. In this case the image must be rotated in order to appear
-     * correctly.
-     */
-    CDV_iOSDevice device = [self getCurrentDevice];
-    if (UIInterfaceOrientationIsLandscape(orientation) && !device.iPhone6Plus && !device.iPad)
-    {
-        imgTransform = CGAffineTransformMakeRotation(M_PI / 2);
-        imgBounds.size = CGSizeMake(imgBounds.size.height, imgBounds.size.width);
+    if (statusBarOverlaysWebView) {
+
+        [_statusBarBackgroundView removeFromSuperview];
+
+    } else {
+
+        [self initializeStatusBarBackgroundView];
+        [self.webView.superview addSubview:_statusBarBackgroundView];
+
     }
 
-    // There's a special case when the image is the size of the screen.
-    if (CGSizeEqualToSize(screenSize, imgBounds.size))
-    {
-        CGRect statusFrame = [self.viewController.view convertRect:[UIApplication sharedApplication].statusBarFrame fromView:nil];
-        if (!(IsAtLeastiOSVersion(@"7.0")))
-        {
-            imgBounds.origin.y -= statusFrame.size.height;
-        }
-    }
-    else if (imgBounds.size.width > 0)
-    {
-        CGRect viewBounds = self.viewController.view.bounds;
-        CGFloat imgAspect = imgBounds.size.width / imgBounds.size.height;
-        CGFloat viewAspect = viewBounds.size.width / viewBounds.size.height;
-        // This matches the behaviour of the native splash screen.
-        CGFloat ratio;
-        if (viewAspect > imgAspect)
-        {
-            ratio = viewBounds.size.width / imgBounds.size.width;
-        }
-        else
-        {
-            ratio = viewBounds.size.height / imgBounds.size.height;
-        }
-        imgBounds.size.height *= ratio;
-        imgBounds.size.width *= ratio;
-    }
-
-    _imageView.transform = imgTransform;
-    _imageView.frame = imgBounds;
 }
 
-- (void)setVisible:(BOOL)visible
+- (BOOL) statusBarOverlaysWebView
 {
-    [self setVisible:visible andForce:NO];
+    return _statusBarOverlaysWebView;
 }
 
-- (void)setVisible:(BOOL)visible andForce:(BOOL)force
+- (void) overlaysWebView:(CDVInvokedUrlCommand*)command
 {
-    if (visible != _visible || force)
-    {
-        _visible = visible;
-
-        id fadeSplashScreenValue = [self.commandDelegate.settings objectForKey:[@"FadeSplashScreen" lowercaseString]];
-        id fadeSplashScreenDuration = [self.commandDelegate.settings objectForKey:[@"FadeSplashScreenDuration" lowercaseString]];
-
-        float fadeDuration = fadeSplashScreenDuration == nil ? kFadeDurationDefault : [fadeSplashScreenDuration floatValue];
-
-        id splashDurationString = [self.commandDelegate.settings objectForKey: [@"SplashScreenDelay" lowercaseString]];
-        float splashDuration = splashDurationString == nil ? kSplashScreenDurationDefault : [splashDurationString floatValue];
-
-        id autoHideSplashScreenValue = [self.commandDelegate.settings objectForKey:[@"AutoHideSplashScreen" lowercaseString]];
-        BOOL autoHideSplashScreen = true;
-
-        if (autoHideSplashScreenValue != nil) {
-            autoHideSplashScreen = [autoHideSplashScreenValue boolValue];
-        }
-
-        if (!autoHideSplashScreen) {
-            // CB-10412 SplashScreenDelay does not make sense if the splashscreen is hidden manually
-            splashDuration = 0;
-        }
-
-
-        if (fadeSplashScreenValue == nil)
-        {
-            fadeSplashScreenValue = @"true";
-        }
-
-        if (![fadeSplashScreenValue boolValue])
-        {
-            fadeDuration = 0;
-        }
-        else if (fadeDuration < 30)
-        {
-            // [CB-9750] This value used to be in decimal seconds, so we will assume that if someone specifies 10
-            // they mean 10 seconds, and not the meaningless 10ms
-            fadeDuration *= 1000;
-        }
-
-        if (_visible)
-        {
-            if (_imageView == nil)
-            {
-                [self createViews];
-            }
-        }
-        else if (fadeDuration == 0 && splashDuration == 0)
-        {
-            [self destroyViews];
-        }
-        else
-        {
-            __weak __typeof(self) weakSelf = self;
-            float effectiveSplashDuration;
-
-            // [CB-10562] AutoHideSplashScreen may be "true" but we should still be able to hide the splashscreen manually.
-            if (!autoHideSplashScreen || force) {
-                effectiveSplashDuration = (fadeDuration) / 1000;
-            } else {
-                effectiveSplashDuration = (splashDuration - fadeDuration) / 1000;
-            }
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (uint64_t) effectiveSplashDuration * NSEC_PER_SEC), dispatch_get_main_queue(), CFBridgingRelease(CFBridgingRetain(^(void) {
-                if (!_destroyed) {
-                    [UIView transitionWithView:self.viewController.view
-                                    duration:(fadeDuration / 1000)
-                                    options:UIViewAnimationOptionTransitionNone
-                                    animations:^(void) {
-                                        [weakSelf hideViews];
-                                    }
-                                    completion:^(BOOL finished) {
-                                        // Always destroy views, otherwise you could have an
-                                        // invisible splashscreen that is overlayed over your active views
-                                        // which causes that no touch events are passed
-                                        if (!_destroyed) {
-                                            [weakSelf destroyViews];
-                                            // TODO: It might also be nice to have a js event happen here -jm
-                                        }
-                                    }
-                    ];
-                }
-            })));
-        }
+    id value = [command argumentAtIndex:0];
+    if (!([value isKindOfClass:[NSNumber class]])) {
+        value = [NSNumber numberWithBool:YES];
     }
+
+    self.statusBarOverlaysWebView = [value boolValue];
+}
+
+- (void) refreshStatusBarAppearance
+{
+    SEL sel = NSSelectorFromString(@"setNeedsStatusBarAppearanceUpdate");
+    if ([self.viewController respondsToSelector:sel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        [self.viewController performSelector:sel withObject:nil];
+#pragma clang diagnostic pop
+    }
+}
+
+- (void) setStyleForStatusBar:(UIStatusBarStyle)style
+{
+    if (_uiviewControllerBasedStatusBarAppearance) {
+        CDVViewController* vc = (CDVViewController*)self.viewController;
+        vc.sb_statusBarStyle = [NSNumber numberWithInt:style];
+        [self refreshStatusBarAppearance];
+
+    } else {
+        [[UIApplication sharedApplication] setStatusBarStyle:style];
+    }
+}
+
+- (void) setStatusBarStyle:(NSString*)statusBarStyle
+{
+    // default, lightContent, blackTranslucent, blackOpaque
+    NSString* lcStatusBarStyle = [statusBarStyle lowercaseString];
+
+    if ([lcStatusBarStyle isEqualToString:@"default"]) {
+        [self styleDefault:nil];
+    } else if ([lcStatusBarStyle isEqualToString:@"lightcontent"]) {
+        [self styleLightContent:nil];
+    } else if ([lcStatusBarStyle isEqualToString:@"blacktranslucent"]) {
+        [self styleBlackTranslucent:nil];
+    } else if ([lcStatusBarStyle isEqualToString:@"blackopaque"]) {
+        [self styleBlackOpaque:nil];
+    }
+}
+
+- (void) styleDefault:(CDVInvokedUrlCommand*)command
+{
+    [self setStyleForStatusBar:UIStatusBarStyleDefault];
+}
+
+- (void) styleLightContent:(CDVInvokedUrlCommand*)command
+{
+    [self setStyleForStatusBar:UIStatusBarStyleLightContent];
+}
+
+- (void) styleBlackTranslucent:(CDVInvokedUrlCommand*)command
+{
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED < 70000
+    # define TRANSLUCENT_STYLE UIStatusBarStyleBlackTranslucent
+    #else
+    # define TRANSLUCENT_STYLE UIStatusBarStyleLightContent
+    #endif
+    [self setStyleForStatusBar:TRANSLUCENT_STYLE];
+}
+
+- (void) styleBlackOpaque:(CDVInvokedUrlCommand*)command
+{
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED < 70000
+    # define OPAQUE_STYLE UIStatusBarStyleBlackOpaque
+    #else
+    # define OPAQUE_STYLE UIStatusBarStyleLightContent
+    #endif
+    [self setStyleForStatusBar:OPAQUE_STYLE];
+}
+
+- (void) backgroundColorByName:(CDVInvokedUrlCommand*)command
+{
+    id value = [command argumentAtIndex:0];
+    if (!([value isKindOfClass:[NSString class]])) {
+        value = @"black";
+    }
+
+    SEL selector = NSSelectorFromString([value stringByAppendingString:@"Color"]);
+    if ([UIColor respondsToSelector:selector]) {
+        _statusBarBackgroundView.backgroundColor = [UIColor performSelector:selector];
+    }
+}
+
+- (void) _backgroundColorByHexString:(NSString*)hexString
+{
+    unsigned int rgbValue = 0;
+    NSScanner* scanner = [NSScanner scannerWithString:hexString];
+    [scanner setScanLocation:1];
+    [scanner scanHexInt:&rgbValue];
+
+    _statusBarBackgroundColor = [UIColor colorWithRed:((rgbValue & 0xFF0000) >> 16)/255.0 green:((rgbValue & 0xFF00) >> 8)/255.0 blue:(rgbValue & 0xFF)/255.0 alpha:1.0];
+    _statusBarBackgroundView.backgroundColor = _statusBarBackgroundColor;
+}
+
+- (void) backgroundColorByHexString:(CDVInvokedUrlCommand*)command
+{
+    NSString* value = [command argumentAtIndex:0];
+    if (!([value isKindOfClass:[NSString class]])) {
+        value = @"#000000";
+    }
+
+    if (![value hasPrefix:@"#"] || [value length] < 7) {
+        return;
+    }
+
+    [self _backgroundColorByHexString:value];
+}
+
+- (void) hideStatusBar
+{
+    if (_uiviewControllerBasedStatusBarAppearance) {
+        CDVViewController* vc = (CDVViewController*)self.viewController;
+        vc.sb_hideStatusBar = [NSNumber numberWithBool:YES];
+        [self refreshStatusBarAppearance];
+
+    } else {
+        UIApplication* app = [UIApplication sharedApplication];
+        [app setStatusBarHidden:YES];
+    }
+}
+
+- (void) hide:(CDVInvokedUrlCommand*)command
+{
+    _statusBarVisible = NO;
+    UIApplication* app = [UIApplication sharedApplication];
+
+    if (!app.isStatusBarHidden)
+    {
+
+        [self hideStatusBar];
+
+        if (IsAtLeastiOSVersion(@"7.0")) {
+            [_statusBarBackgroundView removeFromSuperview];
+        }
+
+        [self resizeWebView];
+
+        _statusBarBackgroundView.hidden = YES;
+    }
+}
+
+- (void) showStatusBar
+{
+    if (_uiviewControllerBasedStatusBarAppearance) {
+        CDVViewController* vc = (CDVViewController*)self.viewController;
+        vc.sb_hideStatusBar = [NSNumber numberWithBool:NO];
+        [self refreshStatusBarAppearance];
+
+    } else {
+        UIApplication* app = [UIApplication sharedApplication];
+        [app setStatusBarHidden:NO];
+    }
+}
+
+- (void) show:(CDVInvokedUrlCommand*)command
+{
+    _statusBarVisible = YES;
+    UIApplication* app = [UIApplication sharedApplication];
+
+    if (app.isStatusBarHidden)
+    {
+        BOOL isIOS7 = (IsAtLeastiOSVersion(@"7.0"));
+
+        [self showStatusBar];
+        [self resizeWebView];
+
+        if (isIOS7) {
+
+            if (!self.statusBarOverlaysWebView) {
+
+                // there is a possibility that when the statusbar was hidden, it was in a different orientation
+                // from the current one. Therefore we need to expand the statusBarBackgroundView as well to the
+                // statusBar's current size
+                CGRect statusBarFrame = [UIApplication sharedApplication].statusBarFrame;
+                statusBarFrame = [self invertFrameIfNeeded:statusBarFrame];
+                CGRect sbBgFrame = _statusBarBackgroundView.frame;
+                sbBgFrame.size = statusBarFrame.size;
+                _statusBarBackgroundView.frame = sbBgFrame;
+                [self.webView.superview addSubview:_statusBarBackgroundView];
+
+            }
+
+        }
+
+        _statusBarBackgroundView.hidden = NO;
+    }
+}
+
+-(void)resizeWebView
+{
+    BOOL isIOS7 = (IsAtLeastiOSVersion(@"7.0"));
+
+    if (isIOS7) {
+        CGRect bounds = [self.viewController.view.window bounds];
+        if (CGRectEqualToRect(bounds, CGRectZero)) {
+            bounds = [[UIScreen mainScreen] bounds];
+        }
+        bounds = [self invertFrameIfNeeded:bounds];
+
+        self.viewController.view.frame = bounds;
+
+        self.webView.frame = bounds;
+
+        CGRect statusBarFrame = [UIApplication sharedApplication].statusBarFrame;
+        statusBarFrame = [self invertFrameIfNeeded:statusBarFrame];
+        CGRect frame = self.webView.frame;
+        CGFloat height = statusBarFrame.size.height;
+
+        if (!self.statusBarOverlaysWebView) {
+            if (_statusBarVisible) {
+                // CB-10158 If a full screen video is playing the status bar height will be 0, set it to 20 if _statusBarVisible
+                frame.origin.y = height > 0 ? height: 20;
+            }
+        } else {
+            // Even if overlay is used, we want to handle in-call/recording/hotspot larger status bar
+            frame.origin.y = height >= 20 ? height - 20 : 0;
+        }
+        frame.size.height -= frame.origin.y;
+        self.webView.frame = frame;
+    } else {
+        CGRect bounds = [[UIScreen mainScreen] applicationFrame];
+        self.viewController.view.frame = bounds;
+    }
+}
+
+- (void) dealloc
+{
+    [[UIApplication sharedApplication] removeObserver:self forKeyPath:@"statusBarHidden"];
+    [[NSNotificationCenter defaultCenter]removeObserver:self name:UIApplicationDidChangeStatusBarOrientationNotification object:nil];
+}
+
+
+#pragma mark - UIScrollViewDelegate
+
+- (BOOL)scrollViewShouldScrollToTop:(UIScrollView *)scrollView
+{
+    [self fireTappedEvent];
+    return NO;
 }
 
 @end

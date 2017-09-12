@@ -17,31 +17,34 @@
  under the License.
  */
 
-#import <Foundation/Foundation.h>
 #import <Cordova/CDVPlugin.h>
-#import <Lottie/Lottie.h>
+#import <Cordova/CDVInvokedUrlCommand.h>
 
-typedef struct {
-    BOOL iPhone;
-    BOOL iPad;
-    BOOL iPhone4;
-    BOOL iPhone5;
-    BOOL iPhone6;
-    BOOL iPhone6Plus;
-    BOOL retina;
-
-} CDV_iOSDevice;
-
-@interface CDVSplashScreen : CDVPlugin {
-    UIActivityIndicatorView* _activityView;
-    UIImageView* _imageView;
-    LOTAnimationView *LotAnimation;
-    NSString* _curImageName;
-    BOOL _visible;
-    BOOL _destroyed;
+@interface CDVStatusBar : CDVPlugin {
+    @protected
+    BOOL _statusBarOverlaysWebView;
+    UIView* _statusBarBackgroundView;
+    BOOL _uiviewControllerBasedStatusBarAppearance;
+    UIColor* _statusBarBackgroundColor;
+    NSString* _eventsCallbackId;
 }
 
-- (void)show:(CDVInvokedUrlCommand*)command;
-- (void)hide:(CDVInvokedUrlCommand*)command;
+@property (atomic, assign) BOOL statusBarOverlaysWebView;
+@property (atomic, assign) BOOL statusBarVisible;
+
+- (void) overlaysWebView:(CDVInvokedUrlCommand*)command;
+
+- (void) styleDefault:(CDVInvokedUrlCommand*)command;
+- (void) styleLightContent:(CDVInvokedUrlCommand*)command;
+- (void) styleBlackTranslucent:(CDVInvokedUrlCommand*)command;
+- (void) styleBlackOpaque:(CDVInvokedUrlCommand*)command;
+
+- (void) backgroundColorByName:(CDVInvokedUrlCommand*)command;
+- (void) backgroundColorByHexString:(CDVInvokedUrlCommand*)command;
+
+- (void) hide:(CDVInvokedUrlCommand*)command;
+- (void) show:(CDVInvokedUrlCommand*)command;
+
+- (void) _ready:(CDVInvokedUrlCommand*)command;
 
 @end
