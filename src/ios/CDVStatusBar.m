@@ -216,11 +216,7 @@ static const void *kStatusBarStyle = &kStatusBarStyle;
         rect.size.height = temp;
         rect.origin = CGPointZero;
     }
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> parent of 7137947... commit
     return rect;
 }
 
@@ -230,10 +226,7 @@ static const void *kStatusBarStyle = &kStatusBarStyle;
     if (!IsAtLeastiOSVersion(@"7.0") || statusBarOverlaysWebView == _statusBarOverlaysWebView) {
         return;
     }
-    
-    _statusBarOverlaysWebView = statusBarOverlaysWebView;
 
-<<<<<<< HEAD
     _statusBarOverlaysWebView = statusBarOverlaysWebView;
 
     [self resizeWebView];
@@ -244,16 +237,6 @@ static const void *kStatusBarStyle = &kStatusBarStyle;
 
     } else {
 
-=======
-    [self resizeWebView];
-
-    if (statusBarOverlaysWebView) {
-
-        [_statusBarBackgroundView removeFromSuperview];
-
-    } else {
-
->>>>>>> parent of 7137947... commit
         [self initializeStatusBarBackgroundView];
         [self.webView.superview addSubview:_statusBarBackgroundView];
 
@@ -403,11 +386,7 @@ static const void *kStatusBarStyle = &kStatusBarStyle;
 
     if (!app.isStatusBarHidden)
     {
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> parent of 7137947... commit
         [self hideStatusBar];
 
         if (IsAtLeastiOSVersion(@"7.0")) {
@@ -466,7 +445,6 @@ static const void *kStatusBarStyle = &kStatusBarStyle;
         _statusBarBackgroundView.hidden = NO;
     }
 }
-<<<<<<< HEAD
 
 -(void)resizeWebView
 {
@@ -481,22 +459,6 @@ static const void *kStatusBarStyle = &kStatusBarStyle;
 
         self.viewController.view.frame = bounds;
 
-=======
-
--(void)resizeWebView
-{
-    BOOL isIOS7 = (IsAtLeastiOSVersion(@"7.0"));
-
-    if (isIOS7) {
-        CGRect bounds = [self.viewController.view.window bounds];
-        if (CGRectEqualToRect(bounds, CGRectZero)) {
-            bounds = [[UIScreen mainScreen] bounds];
-        }
-        bounds = [self invertFrameIfNeeded:bounds];
-
-        self.viewController.view.frame = bounds;
-
->>>>>>> parent of 7137947... commit
         self.webView.frame = bounds;
 
         CGRect statusBarFrame = [UIApplication sharedApplication].statusBarFrame;
